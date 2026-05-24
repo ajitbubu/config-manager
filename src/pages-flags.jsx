@@ -28,6 +28,10 @@ export function Dashboard({ env, tenant, onGoTo }) {
   const publishedConfigs = FCC_DATA.TENANTS.reduce((a, t) => a + t.envs.length, 0);
   const pending = approvals.length;
   const totalReq = fetches.reduce((a, b) => a + b, 0);
+  const hourlyRate = totalReq > 0 ? Math.max(1, Math.round(totalReq / 48)) : 0;
+  const peakRate = Math.max(0, ...fetches);
+  const avgRate = totalReq > 0 ? Math.round(totalReq / fetches.length) : 0;
+  const hasMetrics = totalReq > 0;
 
   return (
     <div className="page">
@@ -50,7 +54,7 @@ export function Dashboard({ env, tenant, onGoTo }) {
           <div className="card metric">
             <div className="label"><Icons.flag size={13}/> Total flags</div>
             <div className="value">{totalFlags}</div>
-            <div className="trend up">+3 this week · {activeFlags} active, {staleFlags} stale</div>
+            <div className="trend">{activeFlags} active · {staleFlags} stale</div>
           </div>
           <div className="card metric">
             <div className="label"><Icons.rocket size={13}/> Published configs</div>
@@ -60,12 +64,12 @@ export function Dashboard({ env, tenant, onGoTo }) {
           <div className="card metric">
             <div className="label"><Icons.clock size={13}/> Pending approvals</div>
             <div className="value">{pending}</div>
-            <div className="trend down">1 blocking prod · SLA 4h</div>
+            <div className="trend">{pending === 0 ? 'inbox clear' : `${pending} awaiting review`}</div>
           </div>
           <div className="card metric">
             <div className="label"><Icons.bolt size={13}/> Resolved config / hr</div>
-            <div className="value">{Math.round(totalReq/48).toLocaleString()}</div>
-            <div className="trend up">+12.4% WoW · p99 14ms</div>
+            <div className="value">{hasMetrics ? hourlyRate.toLocaleString() : '—'}</div>
+            <div className="trend">{hasMetrics ? `${totalReq.toLocaleString()} fetches in last 48h` : 'no fetches yet'}</div>
           </div>
         </div>
 
@@ -73,35 +77,40 @@ export function Dashboard({ env, tenant, onGoTo }) {
           <div className="card">
             <div className="card-head">
               <span>Config fetches</span>
-              <span className="sub">last 48h · prod + stage</span>
+              <span className="sub">last 48h · all tenants × envs</span>
               <div className="spacer"/>
-              <span className="chip accent mono">cdn.fcc.io</span>
+              <span className="chip accent mono">localhost:8787</span>
             </div>
-            <div style={{padding:'16px 16px 8px'}}>
-              <Sparkline data={fetches} height={140} />
-            </div>
-            <div className="hstack" style={{padding:'0 16px 12px', gap: 24}}>
-              <div>
-                <div className="muted text-xs">Peak</div>
-                <div className="mono num" style={{fontSize:13}}>{Math.max(...fetches).toLocaleString()}/hr</div>
+            {hasMetrics ? (
+              <>
+                <div style={{padding:'16px 16px 8px'}}>
+                  <Sparkline data={fetches} height={140} />
+                </div>
+                <div className="hstack" style={{padding:'0 16px 12px', gap: 24}}>
+                  <div>
+                    <div className="muted text-xs">Peak</div>
+                    <div className="mono num" style={{fontSize:13}}>{peakRate.toLocaleString()}/hr</div>
+                  </div>
+                  <div>
+                    <div className="muted text-xs">Avg</div>
+                    <div className="mono num" style={{fontSize:13}}>{avgRate.toLocaleString()}/hr</div>
+                  </div>
+                  <div>
+                    <div className="muted text-xs">Total</div>
+                    <div className="mono num" style={{fontSize:13}}>{totalReq.toLocaleString()}</div>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="vstack" style={{padding:'40px 24px', alignItems:'center', textAlign:'center', gap:8}}>
+                <Icons.bolt size={20} style={{color:'var(--muted-2)'}}/>
+                <div style={{fontWeight:600, fontSize:13}}>Telemetry warms up after CDN reads</div>
+                <div className="muted text-xs" style={{maxWidth:320}}>
+                  Open the <span className="mono">Resolved preview</span> drawer, or
+                  curl <span className="mono">/cdn/cfg/prod/acme.json</span> to start filling this chart.
+                </div>
               </div>
-              <div>
-                <div className="muted text-xs">Avg</div>
-                <div className="mono num" style={{fontSize:13}}>{Math.round(fetches.reduce((a,b)=>a+b)/fetches.length).toLocaleString()}/hr</div>
-              </div>
-              <div>
-                <div className="muted text-xs">Cache hit</div>
-                <div className="mono num" style={{fontSize:13, color:'var(--success)'}}>98.2%</div>
-              </div>
-              <div>
-                <div className="muted text-xs">p50 / p99</div>
-                <div className="mono num" style={{fontSize:13}}>3ms / 14ms</div>
-              </div>
-              <div>
-                <div className="muted text-xs">Errors</div>
-                <div className="mono num" style={{fontSize:13, color:'var(--success)'}}>0.004%</div>
-              </div>
-            </div>
+            )}
           </div>
           <div className="card">
             <div className="card-head">
