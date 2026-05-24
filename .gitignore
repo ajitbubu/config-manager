@@ -3,3 +3,9 @@ dist
 .DS_Store
 *.log
 .vite
+.gstack/
+
+# SQLite runtime data
+server/fcc.db
+server/fcc.db-shm
+server/fcc.db-wal
