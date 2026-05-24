@@ -611,3 +611,28 @@ kbd {
 .env-dot.env-qa  { background: var(--env-qa); }
 .env-dot.env-stage { background: var(--env-stage); }
 .env-dot.env-prod { background: var(--env-prod); }
+
+/* keyboard focus — visible only when navigating by keyboard */
+:focus { outline: none; }
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.btn:focus-visible,
+.chipfilter:focus-visible,
+.icon-btn:focus-visible {
+  outline-offset: 3px;
+}
+.switch:focus-visible,
+.switch[tabindex]:focus-visible {
+  outline-offset: 3px;
+  border-radius: 999px;
+}
+.input:focus-visible,
+.textarea:focus-visible,
+.select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: var(--accent);
+}
