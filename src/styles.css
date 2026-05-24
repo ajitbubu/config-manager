@@ -259,8 +259,8 @@ button { font-family: inherit; color: inherit; }
   background: var(--surface);
   position: sticky; top: 0; z-index: 5;
 }
-.page-head h1 { margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.02em; }
-.page-head .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+.page-head h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.025em; line-height: 1.15; }
+.page-head .sub { color: var(--muted); font-size: 12px; margin-top: 4px; }
 .page-head .actions { display: flex; align-items: center; gap: 8px; }
 .page-body { padding: 16px 20px 32px; }
 
