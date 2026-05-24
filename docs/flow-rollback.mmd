@@ -1,0 +1,27 @@
+sequenceDiagram
+  autonumber
+  actor Ops as DevOps<br/>(Hana · u_3)
+  participant UI as FCC UI
+  participant API as Express API
+  participant DB as SQLite
+
+  Ops->>UI: Edit flag, publish → v131
+  UI->>API: POST /api/deployments {tenant, env, note}
+  API->>DB: snapshot = full source of all flags
+  API->>DB: INSERT deployments v131 + snapshot JSON
+  API-->>UI: 201 dep_v131
+
+  Note over Ops,DB: Issue detected in v131 — revert
+
+  Ops->>UI: Click Rollback on dep_v131 row
+  UI->>API: POST /api/deployments/:id/rollback
+  API->>DB: SELECT previous succeeded deployment<br/>(same tenant + env, at < target.at)
+  API->>API: parse snapshot.source
+  loop for each flag in snapshot
+    API->>DB: UPDATE flags SET overrides=?, rollout=?<br/>WHERE key=?
+  end
+  API->>DB: INSERT deployments<br/>(status=rolled_back, version=previous.version,<br/>snapshot=previous.snapshot)
+  API->>DB: INSERT audit_log (action=rollback)
+  API-->>UI: 200 {id, restoredFrom: previous.version}
+
+  Note over API,DB: Subsequent CDN reads see the restored flag values<br/>because the live flags table was rewritten from the snapshot.

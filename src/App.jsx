@@ -1,21 +1,21 @@
 import { useEffect, useState } from 'react';
-import { FCC_DATA } from './data.js';
 import { Icons, Sidebar, ToastProvider, TopBar } from './ui.jsx';
 import { Dashboard, FlagsPage } from './pages-flags.jsx';
 import {
   AuditPage, DeploymentsPage, DiffPage, EnvsPage, Login, SettingsPage, TenantsPage,
 } from './pages-other.jsx';
+import { StoreProvider, useStore } from './store.jsx';
 
 const TWEAKS = { theme: 'light' };
 
-export default function App() {
+function Shell() {
   const [authed, setAuthed] = useState(() => localStorage.getItem('fcc_authed') === '1');
   const [page, setPage] = useState(() => localStorage.getItem('fcc_page') || 'flags');
   const [env, setEnv] = useState(() => localStorage.getItem('fcc_env') || 'prod');
   const [tenant, setTenant] = useState(() => localStorage.getItem('fcc_tenant') || 'acme');
   const [theme, setTheme] = useState(TWEAKS.theme || 'light');
   const [editMode, setEditMode] = useState(false);
-  const [flagsState, setFlagsState] = useState(() => structuredClone(FCC_DATA.FLAGS));
+  const { loading, error } = useStore();
 
   useEffect(() => { localStorage.setItem('fcc_page', page); }, [page]);
   useEffect(() => { localStorage.setItem('fcc_env', env); }, [env]);
@@ -38,10 +38,25 @@ export default function App() {
 
   if (!authed) return <Login onEnter={() => { localStorage.setItem('fcc_authed', '1'); setAuthed(true); }} />;
 
+  if (loading) {
+    return <div className="login-wrap"><div className="card" style={{padding:24}}><span className="muted">Loading…</span></div></div>;
+  }
+  if (error) {
+    return (
+      <div className="login-wrap">
+        <div className="card" style={{padding:24, maxWidth: 520}}>
+          <h3>API unreachable</h3>
+          <div className="muted text-xs">{error}</div>
+          <div className="muted text-xs mt-12">Start the backend with <span className="mono">npm run dev:server</span> (or <span className="mono">npm run dev:all</span>).</div>
+        </div>
+      </div>
+    );
+  }
+
   let pageEl = null;
   switch (page) {
     case 'dashboard':   pageEl = <Dashboard env={env} tenant={tenant} onGoTo={setPage}/>; break;
-    case 'flags':       pageEl = <FlagsPage env={env} tenant={tenant} flagsState={flagsState} setFlagsState={setFlagsState}/>; break;
+    case 'flags':       pageEl = <FlagsPage env={env} tenant={tenant}/>; break;
     case 'tenants':     pageEl = <TenantsPage tenant={tenant} onTenant={setTenant}/>; break;
     case 'envs':        pageEl = <EnvsPage/>; break;
     case 'diff':        pageEl = <DiffPage tenant={tenant}/>; break;
@@ -57,12 +72,10 @@ export default function App() {
   };
 
   return (
-    <ToastProvider>
-      <div className="app">
-        <TopBar env={env} onEnv={setEnv} tenant={tenant} onTenant={setTenant}/>
-        <Sidebar page={page} onPage={setPage}/>
-        <main className="main">{pageEl}</main>
-      </div>
+    <div className="app">
+      <TopBar env={env} onEnv={setEnv} tenant={tenant} onTenant={setTenant}/>
+      <Sidebar page={page} onPage={setPage}/>
+      <main className="main">{pageEl}</main>
       {editMode && (
         <div className="tweaks">
           <span className="title">Tweaks</span>
@@ -72,6 +85,16 @@ export default function App() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <ToastProvider>
+      <StoreProvider>
+        <Shell />
+      </StoreProvider>
     </ToastProvider>
   );
 }

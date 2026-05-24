@@ -1,6 +1,8 @@
 // Remaining pages: Tenants, Envs, Diff, Deployments, Audit, Settings, Login
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { FCC_DATA } from './data.js';
+import { api } from './api.js';
+import { useStore } from './store.jsx';
 import {
   cx, Icons, EnvChip, StatusChip, TenantAvatar, UserAvatar,
   JsonView, useToast, envColors, timeAgo, fmtDate, fmtValue,
@@ -8,8 +10,19 @@ import {
 
 export function TenantsPage({ tenant, onTenant }) {
   const [sel, setSel] = useState(tenant);
+  const [tenantConfig, setTenantConfig] = useState(() => {
+    const stored = localStorage.getItem('fcc_tenant_config');
+    if (stored) return JSON.parse(stored);
+    return Object.fromEntries(FCC_DATA.TENANTS.map(x => [x.id, { modules: [...x.modules], envs: [...x.envs] }]));
+  });
+  const toast = useToast();
+  const persist = (next) => {
+    setTenantConfig(next);
+    localStorage.setItem('fcc_tenant_config', JSON.stringify(next));
+  };
   const t = FCC_DATA.TENANTS.find(x => x.id === sel);
-  const flags = FCC_DATA.FLAGS.filter(f => t.modules.includes(f.module)).length;
+  const cfg = tenantConfig[sel] || { modules: t.modules, envs: t.envs };
+  const flags = FCC_DATA.FLAGS.filter(f => cfg.modules.includes(f.module)).length;
   const theme = FCC_DATA.THEMES.find(x => x.id === t.theme);
   return (
     <div className="page">
@@ -48,8 +61,8 @@ export function TenantsPage({ tenant, onTenant }) {
             </div>
             <div className="grid grid-4 mt-16">
               {[
-                ['Modules', t.modules.length],
-                ['Environments', t.envs.length],
+                ['Modules', cfg.modules.length],
+                ['Environments', cfg.envs.length],
                 ['Active flags', flags],
                 ['Theme', theme.name],
               ].map(([k,v]) => (
@@ -65,9 +78,13 @@ export function TenantsPage({ tenant, onTenant }) {
               <div className="card-head"><Icons.env size={14}/>Modules enabled</div>
               <div style={{padding:12}} className="vstack gap-8">
                 {['checkout','home','pricing','support','account','tracking','dispatch','billing','player','library','discovery','appointments','records','cards','transfer','onboarding'].map(m => {
-                  const on = t.modules.includes(m);
+                  const on = cfg.modules.includes(m);
                   return (
-                    <div key={m} className="hstack">
+                    <div key={m} className="hstack" style={{cursor:'pointer'}} onClick={() => {
+                      const nextMods = on ? cfg.modules.filter(x => x !== m) : [...cfg.modules, m];
+                      persist({ ...tenantConfig, [sel]: { ...cfg, modules: nextMods } });
+                      toast(`${t.name}: ${m} ${on ? 'disabled' : 'enabled'}`);
+                    }}>
                       <span className="mono text-sm" style={{minWidth:120}}>{m}</span>
                       <div className="flex1"/>
                       <div className="switch" data-on={on}/>
@@ -90,15 +107,22 @@ export function TenantsPage({ tenant, onTenant }) {
               <div className="card">
                 <div className="card-head"><Icons.env size={14}/>Environments</div>
                 <div style={{padding:12}} className="vstack gap-8">
-                  {FCC_DATA.ENVS.map(e => (
-                    <div key={e.id} className="hstack">
-                      <EnvChip env={e.id}/>
-                      <span className="text-sm">{e.name}</span>
-                      <div className="flex1"/>
-                      <span className="mono text-xs muted">cdn.fcc.io/cfg/{e.id}/{t.id}.json</span>
-                      <div className="switch" data-on={t.envs.includes(e.id)}/>
-                    </div>
-                  ))}
+                  {FCC_DATA.ENVS.map(e => {
+                    const on = cfg.envs.includes(e.id);
+                    return (
+                      <div key={e.id} className="hstack" style={{cursor:'pointer'}} onClick={() => {
+                        const nextEnvs = on ? cfg.envs.filter(x => x !== e.id) : [...cfg.envs, e.id];
+                        persist({ ...tenantConfig, [sel]: { ...cfg, envs: nextEnvs } });
+                        toast(`${t.name}: ${e.name} ${on ? 'disabled' : 'enabled'}`);
+                      }}>
+                        <EnvChip env={e.id}/>
+                        <span className="text-sm">{e.name}</span>
+                        <div className="flex1"/>
+                        <span className="mono text-xs muted">{api.base}/cdn/cfg/{e.id}/{t.id}.json</span>
+                        <div className="switch" data-on={on}/>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -110,6 +134,14 @@ export function TenantsPage({ tenant, onTenant }) {
 }
 
 export function EnvsPage() {
+  const toast = useToast();
+  const [rules, setRules] = useState(() => {
+    const stored = localStorage.getItem('fcc_promotion_rules');
+    return stored ? JSON.parse(stored) : {
+      'dev → qa': true, 'qa → stage': true, 'stage → prod': true, 'prod rollback': true,
+    };
+  });
+  const persist = (next) => { setRules(next); localStorage.setItem('fcc_promotion_rules', JSON.stringify(next)); };
   return (
     <div className="page">
       <div className="page-head">
@@ -153,18 +185,24 @@ export function EnvsPage() {
           <div className="card-head">Promotion rules</div>
           <div className="vstack" style={{padding:12, gap:10}}>
             {[
-              ['dev → qa', 'Any developer with write scope', true],
-              ['qa → stage', 'Requires: CI green + 1 approver', true],
-              ['stage → prod', 'Requires: 2 approvers + kill-switch attached', true],
-              ['prod rollback', 'DevOps only · paging desk notified', true],
-            ].map(([k,v,on]) => (
-              <div key={k} className="hstack">
-                <span className="mono text-sm" style={{width:160}}>{k}</span>
-                <span className="text-sm muted">{v}</span>
-                <div className="flex1"/>
-                <div className="switch" data-on={on}/>
-              </div>
-            ))}
+              ['dev → qa', 'Any developer with write scope'],
+              ['qa → stage', 'Requires: CI green + 1 approver'],
+              ['stage → prod', 'Requires: 2 approvers + kill-switch attached'],
+              ['prod rollback', 'DevOps only · paging desk notified'],
+            ].map(([k,v]) => {
+              const on = rules[k] === true;
+              return (
+                <div key={k} className="hstack" style={{cursor:'pointer'}} onClick={() => {
+                  persist({ ...rules, [k]: !on });
+                  toast(`${k} ${!on ? 'enabled' : 'disabled'}`);
+                }}>
+                  <span className="mono text-sm" style={{width:160}}>{k}</span>
+                  <span className="text-sm muted">{v}</span>
+                  <div className="flex1"/>
+                  <div className="switch" data-on={on}/>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -173,10 +211,20 @@ export function EnvsPage() {
 }
 
 export function DiffPage({ tenant }) {
+  const { publish } = useStore();
+  const toast = useToast();
   const [a, setA] = useState({ env: 'stage', tenant });
   const [b, setB] = useState({ env: 'prod', tenant });
-  const rA = useMemo(() => FCC_DATA.resolveAll({ ...a, platform:'web', browser:'chrome', appVersion:'2.1.0', userId:'diff' }), [a]);
-  const rB = useMemo(() => FCC_DATA.resolveAll({ ...b, platform:'web', browser:'chrome', appVersion:'2.1.0', userId:'diff' }), [b]);
+  const [rA, setRA] = useState({ meta: { version: '—', etag: '—' }, features: {} });
+  const [rB, setRB] = useState({ meta: { version: '—', etag: '—' }, features: {} });
+  useEffect(() => {
+    let cancelled = false;
+    api.cdnFetch(a.env, a.tenant, { platform:'web', browser:'chrome', appVersion:'2.1.0', userId:'diff' })
+      .then(j => { if (!cancelled) setRA(j); }).catch(() => {});
+    api.cdnFetch(b.env, b.tenant, { platform:'web', browser:'chrome', appVersion:'2.1.0', userId:'diff' })
+      .then(j => { if (!cancelled) setRB(j); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [a.env, a.tenant, b.env, b.tenant]);
   const keys = [...new Set([...Object.keys(rA.features), ...Object.keys(rB.features)])].sort();
   const diffs = keys.map(k => {
     const av = rA.features[k], bv = rB.features[k];
@@ -190,8 +238,16 @@ export function DiffPage({ tenant }) {
       <div className="page-head">
         <div><h1>Diff & compare</h1><div className="sub">{changed.length} of {diffs.length} flags differ</div></div>
         <div className="actions">
-          <button className="btn"><Icons.copy size={14}/>Copy diff</button>
-          <button className="btn accent"><Icons.rocket size={14}/>Promote all</button>
+          <button className="btn" onClick={async () => {
+            try { await navigator.clipboard.writeText(JSON.stringify(changed, null, 2)); toast(`Copied ${changed.length} diff rows`); }
+            catch { toast('Copy failed'); }
+          }}><Icons.copy size={14}/>Copy diff</button>
+          <button className="btn accent" disabled={changed.length === 0} onClick={async () => {
+            try {
+              await publish(b.tenant, b.env, `Promote from ${a.tenant}/${a.env} · ${changed.length} flags`);
+              toast(`Promoted to ${b.tenant}/${b.env}`);
+            } catch (e) { toast(`Promote failed: ${e.message}`); }
+          }}><Icons.rocket size={14}/>Publish {b.env}</button>
         </div>
       </div>
       <div className="filterbar">
@@ -266,17 +322,19 @@ function DiffList({ diffs, side }) {
 }
 
 export function DeploymentsPage() {
+  const { deployments, publish, rollback } = useStore();
   const [q, setQ] = useState('');
   const [rollbackTarget, setRollbackTarget] = useState(null);
+  const [publishOpen, setPublishOpen] = useState(false);
   const toast = useToast();
-  const items = FCC_DATA.DEPLOYMENTS.filter(d =>
+  const items = deployments.filter(d =>
     !q || d.id.includes(q) || d.tenant.includes(q) || d.version.includes(q) || (d.note||'').toLowerCase().includes(q.toLowerCase())
   );
   return (
     <div className="page">
       <div className="page-head">
-        <div><h1>Deployments</h1><div className="sub">publish pipeline · {FCC_DATA.DEPLOYMENTS.filter(d=>d.status==='succeeded').length} succeeded / {FCC_DATA.DEPLOYMENTS.filter(d=>d.status==='failed').length} failed this week</div></div>
-        <div className="actions"><button className="btn"><Icons.history size={14}/>Schedule</button><button className="btn accent"><Icons.rocket size={14}/>Publish now</button></div>
+        <div><h1>Deployments</h1><div className="sub">publish pipeline · {deployments.filter(d=>d.status==='succeeded').length} succeeded / {deployments.filter(d=>d.status==='failed').length} failed this week</div></div>
+        <div className="actions"><button className="btn"><Icons.history size={14}/>Schedule</button><button className="btn accent" onClick={() => setPublishOpen(true)}><Icons.rocket size={14}/>Publish now</button></div>
       </div>
       <div className="filterbar">
         <div className="search" style={{width:260}}><Icons.search size={13}/>
@@ -307,7 +365,10 @@ export function DeploymentsPage() {
                 <td><StatusChip status={d.status}/></td>
                 <td>
                   <div className="hstack gap-4">
-                    <button className="btn sm ghost" onClick={() => toast(`Copied ${d.cdn}`)}><Icons.copy size={12}/></button>
+                    <button className="btn sm ghost" onClick={async () => {
+                      const url = `${api.base}${d.cdn}`;
+                      try { await navigator.clipboard.writeText(url); toast(`Copied ${url}`); } catch { toast('Copy failed'); }
+                    }}><Icons.copy size={12}/></button>
                     {d.status === 'succeeded' && <button className="btn sm" onClick={() => setRollbackTarget(d)}><Icons.undo size={12}/>Rollback</button>}
                   </div>
                 </td>
@@ -329,19 +390,75 @@ export function DeploymentsPage() {
               <div className="hstack mt-16">
                 <button className="btn ghost" onClick={()=>setRollbackTarget(null)}>Cancel</button>
                 <div className="flex1"/>
-                <button className="btn danger" onClick={()=>{setRollbackTarget(null); toast(`Rolled back ${rollbackTarget.tenant}/${rollbackTarget.env} to ${rollbackTarget.version}`);}}>Confirm rollback</button>
+                <button className="btn danger" onClick={async () => {
+                  const target = rollbackTarget;
+                  setRollbackTarget(null);
+                  try {
+                    const r = await rollback(target.id);
+                    toast(`Rolled back ${target.tenant}/${target.env} → ${r.restoredFrom}`);
+                  } catch (e) { toast(`Rollback failed: ${e.message}`); }
+                }}>Confirm rollback</button>
               </div>
             </div>
           </div>
         </>
       )}
+      {publishOpen && <PublishDialog onClose={() => setPublishOpen(false)} onPublish={async (tenant, env, note) => {
+        try {
+          const dep = await publish(tenant, env, note);
+          toast(`Published ${tenant}/${env} → ${dep.version}`);
+          setPublishOpen(false);
+        } catch (e) { toast(`Publish failed: ${e.message}`); }
+      }}/>}
     </div>
   );
 }
 
+function PublishDialog({ onClose, onPublish }) {
+  const [tenant, setTenant] = useState(FCC_DATA.TENANTS[0].id);
+  const [env, setEnv] = useState('stage');
+  const [note, setNote] = useState('Manual publish');
+  return (
+    <>
+      <div className="drawer-scrim" data-open={true} onClick={onClose}/>
+      <div style={{position:'fixed', inset:0, display:'grid', placeItems:'center', zIndex:70, pointerEvents:'none'}}>
+        <div className="card" style={{width:460, padding:20, boxShadow:'var(--shadow-pop)', pointerEvents:'auto'}}>
+          <div className="hstack mb-8"><Icons.rocket size={16}/><b>Publish snapshot</b></div>
+          <div className="muted text-xs">Snapshots all current flags for the chosen tenant + environment and bumps the version.</div>
+          <div className="grid grid-2 mt-12 gap-8">
+            <label className="field"><span className="label">Tenant</span>
+              <select className="select" value={tenant} onChange={e=>setTenant(e.target.value)}>
+                {FCC_DATA.TENANTS.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            </label>
+            <label className="field"><span className="label">Environment</span>
+              <select className="select" value={env} onChange={e=>setEnv(e.target.value)}>
+                {FCC_DATA.ENVS.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+              </select>
+            </label>
+          </div>
+          <label className="field mt-12"><span className="label">Note</span>
+            <input className="input" value={note} onChange={e=>setNote(e.target.value)}/>
+          </label>
+          <div className="hstack mt-16">
+            <button className="btn ghost" onClick={onClose}>Cancel</button>
+            <div className="flex1"/>
+            <button className="btn accent" onClick={() => onPublish(tenant, env, note)}>Publish</button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 export function AuditPage() {
+  const { audit } = useStore();
   const [q, setQ] = useState('');
-  const items = FCC_DATA.AUDIT.filter(a => !q || (a.entity||'').includes(q) || (a.action||'').includes(q));
+  const [actionFilter, setActionFilter] = useState(null);
+  const items = audit.filter(a =>
+    (!q || (a.entity||'').includes(q) || (a.action||'').includes(q)) &&
+    (!actionFilter || a.action === actionFilter)
+  );
   return (
     <div className="page">
       <div className="page-head">
@@ -352,7 +469,9 @@ export function AuditPage() {
         <div className="search" style={{width:260}}><Icons.search size={13}/>
           <input className="input" style={{border:'none', background:'transparent', padding:0, height:22}} placeholder="Entity or action…" value={q} onChange={e=>setQ(e.target.value)}/>
         </div>
-        {['publish','update','create','approve','rollback','rbac.grant'].map(a => <button key={a} className="chipfilter mono">{a}</button>)}
+        {['publish','update','create','submit','approve','reject','rollback','rbac.grant'].map(a => (
+          <button key={a} className={cx('chipfilter mono', actionFilter===a && 'active')} onClick={() => setActionFilter(actionFilter===a?null:a)}>{a}</button>
+        ))}
         <div className="spacer"/>
         <span className="text-xs muted">Retention 2y</span>
       </div>
@@ -381,6 +500,17 @@ export function AuditPage() {
 }
 
 export function SettingsPage() {
+  const toast = useToast();
+  const [integrations, setIntegrations] = useState(() => {
+    const stored = localStorage.getItem('fcc_integrations');
+    return stored ? JSON.parse(stored) : { GitHub: true, Slack: true, PagerDuty: true, Datadog: false, Jira: false };
+  });
+  const flip = (name) => {
+    const next = { ...integrations, [name]: !integrations[name] };
+    setIntegrations(next);
+    localStorage.setItem('fcc_integrations', JSON.stringify(next));
+    toast(`${name} ${next[name] ? 'enabled' : 'disabled'}`);
+  };
   return (
     <div className="page">
       <div className="page-head"><div><h1>Settings</h1><div className="sub">Workspace, RBAC, tokens, and integrations</div></div></div>
@@ -424,13 +554,18 @@ export function SettingsPage() {
           <div className="card-head"><Icons.bolt size={14}/>Integrations</div>
           <div className="vstack" style={{padding:12, gap:10}}>
             {[
-              ['GitHub', 'Sync flag references from code · detect stale flags', true],
-              ['Slack', 'Deploy + approval notifications → #platform-fcc', true],
-              ['PagerDuty', 'Auto-page on failed prod publish', true],
-              ['Datadog', 'Emit custom metrics for resolution latency', false],
-              ['Jira', 'Link flags to stories · block publish on missing ticket', false],
-            ].map(([n, d, on]) => (
-              <div key={n} className="hstack"><div style={{width:28, height:28, borderRadius:7, background:'var(--surface-3)'}}/><div style={{minWidth:0}}><div className="text-sm" style={{fontWeight:600}}>{n}</div><div className="text-xs muted truncate">{d}</div></div><div className="flex1"/><div className="switch" data-on={on}/></div>
+              ['GitHub', 'Sync flag references from code · detect stale flags'],
+              ['Slack', 'Deploy + approval notifications → #platform-fcc'],
+              ['PagerDuty', 'Auto-page on failed prod publish'],
+              ['Datadog', 'Emit custom metrics for resolution latency'],
+              ['Jira', 'Link flags to stories · block publish on missing ticket'],
+            ].map(([n, d]) => (
+              <div key={n} className="hstack" style={{cursor:'pointer'}} onClick={() => flip(n)}>
+                <div style={{width:28, height:28, borderRadius:7, background:'var(--surface-3)'}}/>
+                <div style={{minWidth:0}}><div className="text-sm" style={{fontWeight:600}}>{n}</div><div className="text-xs muted truncate">{d}</div></div>
+                <div className="flex1"/>
+                <div className="switch" data-on={integrations[n] === true}/>
+              </div>
             ))}
           </div>
         </div>
@@ -440,7 +575,7 @@ export function SettingsPage() {
             <div className="muted text-xs mb-8">Apps load resolved config at boot:</div>
             <pre className="json" style={{maxHeight:260}}>{`import { createClient } from '@fcc/sdk';
 const fcc = createClient({
-  cdnUrl: 'https://cdn.fcc.io/cfg/prod/acme.json',
+  cdnUrl: 'http://localhost:8787/cdn/cfg/prod/acme.json',
   context: { userId, platform: 'web', browser: 'chrome', appVersion: '2.1.0' },
   pollMs: 30_000,
 });
@@ -448,7 +583,7 @@ await fcc.ready();
 
 if (fcc.isOn('checkout.newPaymentFlow')) mount(NewCheckout);
 const hero = fcc.get('home.heroVariant', 'A');
-applyTheme(fcc.theme);`}</pre>
+fcc.onChange(snap => console.log('flags changed →', snap.meta.version));`}</pre>
           </div>
         </div>
       </div>
@@ -457,6 +592,12 @@ applyTheme(fcc.theme);`}</pre>
 }
 
 export function Login({ onEnter }) {
+  const [users, setUsers] = useState(FCC_DATA.USERS);
+  const [userId, setUserId] = useState(() => localStorage.getItem('fcc_user') || 'u_1');
+  const [remember, setRemember] = useState(true);
+  useEffect(() => { api.listUsers().then(setUsers).catch(() => {}); }, []);
+  const u = users.find(x => x.id === userId) || users[0];
+  const submit = () => { localStorage.setItem('fcc_user', userId); onEnter(); };
   return (
     <div className="login-wrap">
       <div className="card" style={{width: 400, padding: 28, boxShadow:'var(--shadow-pop)'}}>
@@ -465,15 +606,21 @@ export function Login({ onEnter }) {
           <div><div>Feature Control Center</div><div className="sub">enterprise · multi-tenant</div></div>
         </div>
         <h2 style={{margin:'20px 0 4px', fontSize:20, letterSpacing:'-0.02em'}}>Sign in</h2>
-        <div className="text-xs muted mb-8">Use your organization identity provider.</div>
-        <label className="field mt-12"><span className="label">Email</span><input className="input" defaultValue="priya@fcc.internal"/></label>
-        <label className="field mt-12"><span className="label">Password</span><input className="input" type="password" defaultValue="••••••••••••"/></label>
+        <div className="text-xs muted mb-8">Pick an identity to author as. Audit entries are attributed to your selection.</div>
+        <label className="field mt-12"><span className="label">Sign in as</span>
+          <select className="select" value={userId} onChange={e=>setUserId(e.target.value)}>
+            {users.map(x => <option key={x.id} value={x.id}>{x.name} — {x.role}</option>)}
+          </select>
+        </label>
+        <label className="field mt-12"><span className="label">Email</span><input className="input" readOnly value={u?.email || ''}/></label>
         <div className="hstack mt-16">
-          <div className="hstack gap-6 text-xs muted"><div className="switch" data-on={true}/>Remember me</div>
+          <div className="hstack gap-6 text-xs muted" style={{cursor:'pointer'}} onClick={() => setRemember(r => !r)}>
+            <div className="switch" data-on={remember}/>Remember me
+          </div>
           <div className="flex1"/>
           <a className="text-xs muted">Forgot?</a>
         </div>
-        <button className="btn accent w-100 mt-16" style={{width:'100%', justifyContent:'center'}} onClick={onEnter}>Sign in with SSO</button>
+        <button className="btn accent w-100 mt-16" style={{width:'100%', justifyContent:'center'}} onClick={submit}>Sign in with SSO</button>
         <hr className="sep mt-16"/>
         <div className="hstack mt-8 gap-8" style={{justifyContent:'center'}}>
           <button className="btn sm">Okta</button><button className="btn sm">Google</button><button className="btn sm">Microsoft</button>

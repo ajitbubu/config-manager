@@ -1,18 +1,26 @@
 // Dashboard + Feature Flags (hero screen with drawer editor)
 import { useEffect, useMemo, useState } from 'react';
 import { FCC_DATA } from './data.js';
+import { api } from './api.js';
+import { useStore } from './store.jsx';
 import {
   cx, Icons, EnvChip, StatusChip, TenantAvatar, UserAvatar,
   Sparkline, Barline, JsonView, useToast, timeAgo, fmtValue,
 } from './ui.jsx';
 
 export function Dashboard({ env, tenant, onGoTo }) {
-  const flags = FCC_DATA.FLAGS;
-  const deps = FCC_DATA.DEPLOYMENTS;
-  const audit = FCC_DATA.AUDIT;
-  const approvals = FCC_DATA.APPROVALS;
-  const fetches = useMemo(() => FCC_DATA.seriesFetches(48), []);
+  const { flags, deployments: deps, audit, approvals, approveApproval } = useStore();
+  const [fetches, setFetches] = useState(() => FCC_DATA.seriesFetches(48));
   const publishes = useMemo(() => FCC_DATA.seriesPublishes(48), []);
+  const toast = useToast();
+
+  useEffect(() => {
+    let cancelled = false;
+    api.metricsFetches()
+      .then(r => { if (!cancelled && r?.fetches) setFetches(r.fetches); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   const totalFlags = flags.length;
   const activeFlags = flags.filter((f) => f.status === 'active').length;
@@ -140,7 +148,10 @@ export function Dashboard({ env, tenant, onGoTo }) {
                       <div className="hstack gap-4">{a.reviewers.map(r => <UserAvatar key={r} id={r} size={18} />)}</div>
                     </td>
                     <td className="muted text-xs nowrap">{timeAgo(a.requestedAt)}</td>
-                    <td><button className="btn sm accent">Review</button></td>
+                    <td><button className="btn sm accent" onClick={async () => {
+                      try { await approveApproval(a.id); toast(`Approved ${a.flag}`); }
+                      catch (e) { toast(`Approve failed: ${e.message}`); }
+                    }}>Approve</button></td>
                   </tr>
                 ))}
               </tbody>
@@ -223,7 +234,8 @@ export function Dashboard({ env, tenant, onGoTo }) {
 }
 
 // ========== FEATURE FLAGS (hero) ==========
-export function FlagsPage({ env, tenant, flagsState, setFlagsState }) {
+export function FlagsPage({ env, tenant }) {
+  const { flags: flagsState, patchFlag, submitApproval } = useStore();
   const [query, setQuery] = useState('');
   const [moduleFilter, setModuleFilter] = useState(null);
   const [typeFilter, setTypeFilter] = useState(null);
@@ -232,8 +244,8 @@ export function FlagsPage({ env, tenant, flagsState, setFlagsState }) {
   const [selected, setSelected] = useState(null);
   const [previewOpen, setPreviewOpen] = useState(false);
 
-  const modules = [...new Set(FCC_DATA.FLAGS.map(f => f.module))];
-  const types   = [...new Set(FCC_DATA.FLAGS.map(f => f.type))];
+  const modules = useMemo(() => [...new Set(flagsState.map(f => f.module))], [flagsState]);
+  const types   = useMemo(() => [...new Set(flagsState.map(f => f.type))], [flagsState]);
 
   const items = flagsState.filter(f => {
     if (query && !(f.key.includes(query) || f.name.toLowerCase().includes(query.toLowerCase()))) return false;
@@ -244,10 +256,6 @@ export function FlagsPage({ env, tenant, flagsState, setFlagsState }) {
     return true;
   });
 
-  const resolved = useMemo(() => ({
-    ...FCC_DATA.resolveAll({ tenant, env, platform: 'web', browser: 'chrome', appVersion: '2.1.0', userId: 'preview-user' })
-  }), [tenant, env, flagsState]);
-
   const selectedFlag = flagsState.find(f => f.key === selected);
   const toast = useToast();
 
@@ -256,6 +264,19 @@ export function FlagsPage({ env, tenant, flagsState, setFlagsState }) {
     if (f.overrides?.env && env in f.overrides.env) v = f.overrides.env[env];
     if (f.overrides?.tenant?.[tenant]?.[env] !== undefined) v = f.overrides.tenant[tenant][env];
     return v;
+  }
+
+  function controlValue(f) {
+    if (f.overrides?.tenant?.[tenant]?.[env] !== undefined) return f.overrides.tenant[tenant][env];
+    if (f.overrides?.env && env in f.overrides.env) return f.overrides.env[env];
+    return f.default;
+  }
+
+  function dominatedBy(f) {
+    const platforms = Object.keys(f.overrides?.platform || {});
+    const browsers = Object.keys(f.overrides?.browser || {});
+    if (platforms.length || browsers.length) return [...platforms.map(p => 'platform:'+p), ...browsers.map(b => 'browser:'+b)];
+    return null;
   }
 
   return (
@@ -322,23 +343,32 @@ export function FlagsPage({ env, tenant, flagsState, setFlagsState }) {
           <tbody>
             {items.map(f => {
               const val = effective(f);
+              const ctrl = controlValue(f);
+              const dominated = f.type==='boolean' ? dominatedBy(f) : null;
               const isOn = f.type==='boolean' && val === true;
               const overridden = f.overrides?.tenant?.[tenant]?.[env] !== undefined;
               return (
                 <tr key={f.key} className="row" data-selected={selected===f.key} onClick={() => setSelected(f.key)}>
                   <td>
                     {f.type === 'boolean' ? (
-                      <div className="switch" data-on={val===true}
-                           onClick={(e)=>{
+                      <div className="switch" data-on={ctrl===true}
+                           onClick={async (e)=>{
                              e.stopPropagation();
-                             setFlagsState(s => s.map(x => x.key===f.key ? {
-                               ...x,
-                               overrides: {
-                                 ...x.overrides,
-                                 env: { ...x.overrides.env, [env]: !val },
-                               }
-                             } : x));
-                             toast(`${f.key} → ${!val} in ${env}`);
+                             const nextVal = !(ctrl===true);
+                             const hasTenantOverride = f.overrides?.tenant?.[tenant]?.[env] !== undefined;
+                             const nextOverrides = hasTenantOverride
+                               ? { tenant: { ...(f.overrides?.tenant || {}), [tenant]: { ...(f.overrides?.tenant?.[tenant] || {}), [env]: nextVal } } }
+                               : { env: { ...(f.overrides?.env || {}), [env]: nextVal } };
+                             try {
+                               await patchFlag(f.key, {
+                                 overrides: nextOverrides,
+                                 __env: env, __tenant: tenant,
+                               });
+                               const where = hasTenantOverride ? `${tenant}/${env}` : env;
+                               toast(`${f.key} → ${nextVal} in ${where}`);
+                             } catch (err) {
+                               toast(`Save failed: ${err.message}`);
+                             }
                            }}/>
                     ) : (
                       <Icons.dot size={10} style={{color:'var(--muted-2)'}}/>
@@ -361,6 +391,9 @@ export function FlagsPage({ env, tenant, flagsState, setFlagsState }) {
                         {fmtValue(val)}
                       </span>
                       {overridden && <span className="chip accent sm" style={{marginLeft:6}}>tenant override</span>}
+                      {f.type==='boolean' && dominated && val !== ctrl && (
+                        <span className="chip warning sm" style={{marginLeft:6}} title={'higher-priority layers: ' + dominated.join(', ')}>dominated</span>
+                      )}
                     </div>
                     <div className="text-xs muted mono">default: {fmtValue(f.default)}</div>
                   </td>
@@ -401,52 +434,84 @@ export function FlagsPage({ env, tenant, flagsState, setFlagsState }) {
         env={env}
         tenant={tenant}
         onClose={() => setSelected(null)}
-        onChange={(next) => setFlagsState(s => s.map(x => x.key===next.key ? next : x))}
-        onSubmit={() => { toast(`Submitted ${selected} for review`); setSelected(null); }}
+        onSave={async (next) => {
+          try {
+            await patchFlag(next.key, {
+              name: next.name,
+              description: next.description,
+              tags: next.tags,
+              owner: next.owner,
+              status: next.status,
+              dependencies: next.dependencies,
+              overrides: next.overrides,
+              rollout: next.rollout,
+              killSwitch: next.killSwitch,
+              __env: env, __tenant: tenant,
+            });
+            toast(`Saved ${next.key}`);
+          } catch (err) { toast(`Save failed: ${err.message}`); }
+        }}
+        onSubmit={async () => {
+          const order = ['dev','qa','stage','prod'];
+          const to = order[Math.min(order.indexOf(env) + 1, order.length - 1)] || 'prod';
+          try {
+            await submitApproval({ flag: selected, tenant, from: env, to });
+            toast(`Submitted ${selected} for review (${env} → ${to})`);
+            setSelected(null);
+          } catch (err) { toast(`Submit failed: ${err.message}`); }
+        }}
       />
 
-      <ResolvedDrawer open={previewOpen} onClose={() => setPreviewOpen(false)} resolved={resolved} env={env} tenant={tenant}/>
+      <ResolvedDrawer open={previewOpen} onClose={() => setPreviewOpen(false)} env={env} tenant={tenant}/>
     </div>
   );
 }
 
-function FlagDrawer({ open, flag, env, tenant, onClose, onChange, onSubmit }) {
+function FlagDrawer({ open, flag, env, tenant, onClose, onSave, onSubmit }) {
   const [tab, setTab] = useState('config');
-  useEffect(() => { if (open) setTab('config'); }, [open, flag?.key]);
-  if (!flag) return <div className="drawer-scrim"/>;
-  const envVal = flag.overrides?.env?.[env];
-  const tenantVal = flag.overrides?.tenant?.[tenant]?.[env];
+  const [draft, setDraft] = useState(flag);
+  const [dirty, setDirty] = useState(false);
+  useEffect(() => { if (open) setTab('config'); setDraft(flag); setDirty(false); }, [open, flag?.key]);
+  useEffect(() => { setDraft(flag); }, [flag]);
+  if (!flag || !draft) return <div className="drawer-scrim"/>;
+  const envVal = draft.overrides?.env?.[env];
+  const tenantVal = draft.overrides?.tenant?.[tenant]?.[env];
 
   const update = (path, value) => {
-    const next = structuredClone(flag);
+    const next = structuredClone(draft);
     let cur = next;
     for (let i = 0; i < path.length - 1; i++) {
       cur[path[i]] = cur[path[i]] || {};
       cur = cur[path[i]];
     }
     cur[path[path.length-1]] = value;
-    next.updatedAt = '2026-04-22T06:30:00Z';
-    next.updatedBy = 'u_1';
-    onChange(next);
+    setDraft(next);
+    setDirty(true);
   };
 
-  const trace = FCC_DATA.resolveFlag(flag, { tenant, env, platform:'web', browser:'chrome', appVersion:'2.1.0', userId:'preview-user' });
+  const trace = FCC_DATA.resolveFlag(draft, { tenant, env, platform:'web', browser:'chrome', appVersion:'2.1.0', userId:'preview-user' });
 
   return (
     <>
       <div className="drawer-scrim" data-open={open} onClick={onClose}/>
       <aside className="drawer" data-open={open}>
         <div className="drawer-head">
-          {flag.type === 'boolean' && (
-            <div className="switch lg" data-on={envVal === true} onClick={() => update(['overrides','env', env], !(envVal===true))}/>
+          {draft.type === 'boolean' && (
+            <div className="switch lg" data-on={(tenantVal !== undefined ? tenantVal : envVal) === true} onClick={() => {
+              const cur = tenantVal !== undefined ? tenantVal : envVal;
+              const next = !(cur === true);
+              if (tenantVal !== undefined) update(['overrides','tenant', tenant, env], next);
+              else update(['overrides','env', env], next);
+            }}/>
           )}
           <div style={{minWidth:0}}>
             <div className="hstack gap-6">
-              <h3>{flag.name}</h3>
-              <StatusChip status={flag.status}/>
-              {flag.killSwitch && <span className="chip danger"><Icons.warn size={10}/>kill switch</span>}
+              <h3>{draft.name}</h3>
+              <StatusChip status={draft.status}/>
+              {draft.killSwitch && <span className="chip danger"><Icons.warn size={10}/>kill switch</span>}
+              {dirty && <span className="chip warning sm">unsaved</span>}
             </div>
-            <div className="mono">{flag.key}</div>
+            <div className="mono">{draft.key}</div>
           </div>
           <div className="flex1"/>
           <button className="btn sm ghost" onClick={onClose}><Icons.close size={14}/></button>
@@ -462,21 +527,21 @@ function FlagDrawer({ open, flag, env, tenant, onClose, onChange, onSubmit }) {
           {tab === 'config' && (
             <div className="vstack" style={{gap:14}}>
               <div className="grid grid-2">
-                <label className="field"><span className="label">Key</span><input className="input mono" readOnly value={flag.key}/></label>
-                <label className="field"><span className="label">Display name</span><input className="input" value={flag.name} onChange={e=>update(['name'], e.target.value)}/></label>
+                <label className="field"><span className="label">Key</span><input className="input mono" readOnly value={draft.key}/></label>
+                <label className="field"><span className="label">Display name</span><input className="input" value={draft.name} onChange={e=>update(['name'], e.target.value)}/></label>
               </div>
               <label className="field"><span className="label">Description</span>
-                <textarea className="textarea" rows={2} value={flag.description} onChange={e=>update(['description'], e.target.value)}/>
+                <textarea className="textarea" rows={2} value={draft.description} onChange={e=>update(['description'], e.target.value)}/>
               </label>
               <div className="grid grid-3">
                 <label className="field"><span className="label">Type</span>
-                  <div className="input" style={{display:'flex',alignItems:'center'}}><span className="mono">{flag.type}</span></div>
+                  <div className="input" style={{display:'flex',alignItems:'center'}}><span className="mono">{draft.type}</span></div>
                 </label>
                 <label className="field"><span className="label">Module</span>
-                  <div className="input mono">{flag.module}</div>
+                  <div className="input mono">{draft.module}</div>
                 </label>
                 <label className="field"><span className="label">Owner</span>
-                  <div className="input hstack gap-6" style={{padding:'6px 10px'}}><UserAvatar id={flag.owner} size={18}/>{FCC_DATA.USERS.find(u=>u.id===flag.owner)?.name}</div>
+                  <div className="input hstack gap-6" style={{padding:'6px 10px'}}><UserAvatar id={draft.owner} size={18}/>{FCC_DATA.USERS.find(u=>u.id===draft.owner)?.name}</div>
                 </label>
               </div>
 
@@ -484,12 +549,12 @@ function FlagDrawer({ open, flag, env, tenant, onClose, onChange, onSubmit }) {
                 <div className="card-head"><Icons.env size={14}/> Environment overrides <span className="sub">applies before tenant + platform</span></div>
                 <div style={{padding:12}} className="grid grid-4">
                   {FCC_DATA.ENVS.map(e => {
-                    const v = flag.overrides?.env?.[e.id];
+                    const v = draft.overrides?.env?.[e.id];
                     const isCur = e.id === env;
                     return (
                       <div key={e.id} className="vstack gap-6" style={{padding:10, border:'1px solid ' + (isCur?'var(--accent)':'var(--border)'), borderRadius:8, background: isCur?'var(--accent-weak)':'transparent'}}>
                         <div className="hstack"><EnvChip env={e.id}/><span className="muted text-xs">{isCur ? 'current':''}</span></div>
-                        <FlagValueInput flag={flag} value={v} onChange={(nv) => update(['overrides','env', e.id], nv)} placeholder={flag.default}/>
+                        <FlagValueInput flag={draft} value={v} onChange={(nv) => update(['overrides','env', e.id], nv)} placeholder={draft.default}/>
                       </div>
                     );
                   })}
@@ -501,15 +566,15 @@ function FlagDrawer({ open, flag, env, tenant, onClose, onChange, onSubmit }) {
                 <div style={{padding:12}} className="hstack gap-8">
                   <TenantAvatar id={tenant}/>
                   <div className="flex1" style={{maxWidth:280}}>
-                    <FlagValueInput flag={flag} value={tenantVal} onChange={(nv) => {
+                    <FlagValueInput flag={draft} value={tenantVal} onChange={(nv) => {
                       update(['overrides','tenant', tenant, env], nv);
                     }} placeholder="inherit from env"/>
                   </div>
                   {tenantVal !== undefined && (
                     <button className="btn sm" onClick={() => {
-                      const next = structuredClone(flag);
+                      const next = structuredClone(draft);
                       if (next.overrides?.tenant?.[tenant]) delete next.overrides.tenant[tenant][env];
-                      onChange(next);
+                      setDraft(next); setDirty(true);
                     }}>Clear</button>
                   )}
                 </div>
@@ -520,11 +585,11 @@ function FlagDrawer({ open, flag, env, tenant, onClose, onChange, onSubmit }) {
                   <div className="card-head"><Icons.desktop size={14}/> Platform</div>
                   <div style={{padding:10}} className="vstack gap-6">
                     {['web','mweb','ios','android'].map(p => {
-                      const v = flag.overrides?.platform?.[p];
+                      const v = draft.overrides?.platform?.[p];
                       return (
                         <div key={p} className="hstack">
                           <span className="mono text-xs" style={{width:56}}>{p}</span>
-                          <div className="flex1"><FlagValueInput flag={flag} value={v} onChange={(nv) => update(['overrides','platform', p], nv)} placeholder="inherit"/></div>
+                          <div className="flex1"><FlagValueInput flag={draft} value={v} onChange={(nv) => update(['overrides','platform', p], nv)} placeholder="inherit"/></div>
                         </div>
                       );
                     })}
@@ -534,11 +599,11 @@ function FlagDrawer({ open, flag, env, tenant, onClose, onChange, onSubmit }) {
                   <div className="card-head"><Icons.globe size={14}/> Browser</div>
                   <div style={{padding:10}} className="vstack gap-6">
                     {['chrome','safari','firefox','edge'].map(b => {
-                      const v = flag.overrides?.browser?.[b];
+                      const v = draft.overrides?.browser?.[b];
                       return (
                         <div key={b} className="hstack">
                           <span className="mono text-xs" style={{width:56}}>{b}</span>
-                          <div className="flex1"><FlagValueInput flag={flag} value={v} onChange={(nv) => update(['overrides','browser', b], nv)} placeholder="inherit"/></div>
+                          <div className="flex1"><FlagValueInput flag={draft} value={v} onChange={(nv) => update(['overrides','browser', b], nv)} placeholder="inherit"/></div>
                         </div>
                       );
                     })}
@@ -556,40 +621,40 @@ function FlagDrawer({ open, flag, env, tenant, onClose, onChange, onSubmit }) {
                     <div style={{fontWeight:600}}>Percentage rollout</div>
                     <div className="muted text-xs">Bucketed by hash({'{userId}:{seed}'})</div>
                   </div>
-                  <div className="switch lg" data-on={flag.rollout?.enabled} onClick={()=>update(['rollout','enabled'], !flag.rollout?.enabled)}/>
+                  <div className="switch lg" data-on={draft.rollout?.enabled} onClick={()=>update(['rollout','enabled'], !draft.rollout?.enabled)}/>
                 </div>
                 <div className="hstack mt-12 gap-12">
-                  <input type="range" min="0" max="100" value={flag.rollout?.percentage||0}
+                  <input type="range" min="0" max="100" value={draft.rollout?.percentage||0}
                          style={{flex:1}}
-                         disabled={!flag.rollout?.enabled}
+                         disabled={!draft.rollout?.enabled}
                          onChange={e=>update(['rollout','percentage'], parseInt(e.target.value))}/>
-                  <div className="mono num" style={{width:52, textAlign:'right'}}>{flag.rollout?.percentage||0}%</div>
+                  <div className="mono num" style={{width:52, textAlign:'right'}}>{draft.rollout?.percentage||0}%</div>
                 </div>
                 <div className="hstack mt-12 gap-8">
                   <span className="text-xs muted">Seed</span>
-                  <input className="input mono" style={{width:200}} value={flag.rollout?.seed||''} disabled={!flag.rollout?.enabled} onChange={e=>update(['rollout','seed'], e.target.value)}/>
+                  <input className="input mono" style={{width:200}} value={draft.rollout?.seed||''} disabled={!draft.rollout?.enabled} onChange={e=>update(['rollout','seed'], e.target.value)}/>
                 </div>
                 <div className="mt-12">
-                  <BucketBar percent={flag.rollout?.percentage||0} enabled={flag.rollout?.enabled}/>
+                  <BucketBar percent={draft.rollout?.percentage||0} enabled={draft.rollout?.enabled}/>
                 </div>
               </div>
 
               <div className="card" style={{padding:14}}>
                 <div style={{fontWeight:600}}>Simulate</div>
                 <div className="muted text-xs">Probe 12 users. Deterministic per userId.</div>
-                <BucketGrid flag={flag}/>
+                <BucketGrid flag={draft}/>
               </div>
             </div>
           )}
 
           {tab === 'targeting' && (
-            <TargetingTab flag={flag} tenant={tenant}/>
+            <TargetingTab flag={draft} tenant={tenant}/>
           )}
 
           {tab === 'dependencies' && (
             <div className="vstack" style={{gap:10}}>
               <div className="muted text-xs">This flag depends on the following parents. It will evaluate to default if any parent is off.</div>
-              {flag.dependencies?.length ? flag.dependencies.map(d => (
+              {draft.dependencies?.length ? draft.dependencies.map(d => (
                 <div key={d} className="card hstack" style={{padding:10}}>
                   <Icons.link size={14}/>
                   <span className="mono">{d}</span>
@@ -600,12 +665,12 @@ function FlagDrawer({ open, flag, env, tenant, onClose, onChange, onSubmit }) {
             </div>
           )}
 
-          {tab === 'history' && <HistoryTab flag={flag}/>}
+          {tab === 'history' && <HistoryTab flag={draft}/>}
 
           {tab === 'json' && (
             <div>
-              <div className="muted text-xs mb-8">Canonical authoring document. POST /api/flags/{flag.key}</div>
-              <JsonView data={flag}/>
+              <div className="muted text-xs mb-8">Canonical authoring document. PATCH /api/flags/{draft.key}</div>
+              <JsonView data={draft}/>
             </div>
           )}
         </div>
@@ -621,7 +686,7 @@ function FlagDrawer({ open, flag, env, tenant, onClose, onChange, onSubmit }) {
           </div>
           <div className="flex1"/>
           <button className="btn ghost" onClick={onClose}>Discard</button>
-          <button className="btn">Save draft</button>
+          <button className="btn" disabled={!dirty} onClick={async () => { await onSave(draft); setDirty(false); }}>Save draft</button>
           <button className="btn accent" onClick={onSubmit}>Submit for review</button>
         </div>
       </aside>
@@ -717,7 +782,8 @@ function TargetingTab({ flag, tenant }) {
 }
 
 function HistoryTab({ flag }) {
-  const rows = FCC_DATA.AUDIT.filter(a => a.entity === flag.key);
+  const { audit } = useStore();
+  const rows = audit.filter(a => a.entity === flag.key);
   return (
     <div className="timeline">
       {rows.length === 0 && <div className="muted text-xs">No history yet.</div>}
@@ -739,8 +805,16 @@ function HistoryTab({ flag }) {
 
 function ResolvedDrawer({ open, onClose, env, tenant }) {
   const [ctx, setCtx] = useState({ platform:'web', browser:'chrome', appVersion:'2.1.0', userId:'preview-user' });
-  const r = useMemo(() => FCC_DATA.resolveAll({ tenant, env, ...ctx }), [tenant, env, ctx]);
-  const cdnUrl = `https://cdn.fcc.io/cfg/${env}/${tenant}.json`;
+  const [r, setR] = useState({ meta: { etag: '', cdnUrl: '' }, features: {} });
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    api.cdnFetch(env, tenant, ctx)
+      .then(j => { if (!cancelled) setR(j); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [open, tenant, env, ctx.platform, ctx.browser, ctx.appVersion, ctx.userId]);
+  const cdnUrl = api.cdnUrl(env, tenant, ctx);
   const toast = useToast();
   return (
     <>
@@ -759,8 +833,11 @@ function ResolvedDrawer({ open, onClose, env, tenant }) {
           <div className="card hstack" style={{padding:10, marginBottom:12}}>
             <Icons.link size={14}/>
             <span className="mono text-xs truncate flex1">{cdnUrl}</span>
-            <span className="chip ghost sm mono">ETag {r.meta.etag}</span>
-            <button className="btn sm" onClick={()=>toast('CDN URL copied')}><Icons.copy size={12}/>Copy</button>
+            <span className="chip ghost sm mono">ETag {r.meta?.etag || '—'}</span>
+            <button className="btn sm" onClick={async () => {
+              try { await navigator.clipboard.writeText(cdnUrl); toast('CDN URL copied'); }
+              catch { toast('Copy failed'); }
+            }}><Icons.copy size={12}/>Copy</button>
           </div>
           <div className="card" style={{padding:10, marginBottom:12}}>
             <div className="hstack mb-8" style={{fontWeight:600, fontSize:12}}>Context</div>
@@ -780,7 +857,7 @@ function ResolvedDrawer({ open, onClose, env, tenant }) {
             </div>
           </div>
           <JsonView data={{ meta: r.meta, features: r.features }} maxHeight={420}/>
-          <div className="mt-16 text-xs muted">GET <span className="mono">/cdn/resolved?env={env}&client={tenant}&platform={ctx.platform}&browser={ctx.browser}&appVersion={ctx.appVersion}</span></div>
+          <div className="mt-16 text-xs muted">GET <span className="mono">/cdn/cfg/{env}/{tenant}.json?platform={ctx.platform}&browser={ctx.browser}&appVersion={ctx.appVersion}&userId={ctx.userId}</span></div>
         </div>
       </aside>
     </>

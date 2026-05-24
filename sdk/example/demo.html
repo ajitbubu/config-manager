@@ -1,0 +1,80 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <title>FCC SDK Demo</title>
+    <style>
+      body { font: 13px/1.5 -apple-system, system-ui, sans-serif; padding: 24px; max-width: 760px; margin: 0 auto; color: #0B0D10; }
+      h1 { font-size: 18px; margin: 0 0 8px; letter-spacing: -0.02em; }
+      .meta { color: #6B7280; font-size: 12px; }
+      .row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #F1F1F0; }
+      .key { font-family: 'JetBrains Mono', ui-monospace, monospace; flex: 1; font-size: 12px; }
+      .val { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12px; color: #0B0D10; }
+      .true { color: #059669; font-weight: 600; }
+      .false { color: #DC2626; }
+      .controls { margin: 16px 0; display: flex; gap: 8px; align-items: center; }
+      select, input { padding: 4px 8px; font: inherit; }
+      .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #F5F5F4; font-size: 11px; font-family: monospace; }
+      pre { background: #F7F7F5; padding: 10px; border-radius: 6px; font-size: 11px; overflow: auto; }
+    </style>
+  </head>
+  <body>
+    <h1>FCC SDK Demo · live consumer</h1>
+    <div class="meta">Polls <code id="cdn"></code> every 5s. Open the FCC UI side-by-side, toggle a flag, then watch this page react.</div>
+    <div class="controls">
+      <label>tenant
+        <select id="tenant">
+          <option>acme</option><option>northwind</option><option>helios</option><option>orbit</option><option>vanta</option>
+        </select>
+      </label>
+      <label>env
+        <select id="env"><option>prod</option><option>stage</option><option>qa</option><option>dev</option></select>
+      </label>
+      <label>userId <input id="uid" value="demo-user-42"/></label>
+      <span class="pill" id="version">—</span>
+      <span class="pill" id="etag">—</span>
+    </div>
+    <div id="rows"></div>
+    <h3 style="margin-top:24px">Raw snapshot</h3>
+    <pre id="snap">loading…</pre>
+
+    <script type="module">
+      import { createClient } from '../src/index.js';
+
+      let client = null;
+      function build() {
+        if (client) client.stop();
+        const tenant = document.getElementById('tenant').value;
+        const env    = document.getElementById('env').value;
+        const userId = document.getElementById('uid').value;
+        const cdnUrl = `http://localhost:8787/cdn/cfg/${env}/${tenant}.json`;
+        document.getElementById('cdn').textContent = cdnUrl;
+        client = createClient({
+          cdnUrl,
+          context: { platform: 'web', browser: 'chrome', appVersion: '1.0.0', userId },
+          pollMs: 5000,
+        });
+        client.onChange(render);
+        client.ready().then(render);
+      }
+
+      function render(snap) {
+        document.getElementById('version').textContent = snap.meta.version || '—';
+        document.getElementById('etag').textContent = (snap.meta.etag || '—').slice(0, 16);
+        const rows = document.getElementById('rows');
+        rows.innerHTML = '';
+        for (const [k, v] of Object.entries(snap.features).sort()) {
+          const row = document.createElement('div');
+          row.className = 'row';
+          const cls = v === true ? 'true' : v === false ? 'false' : '';
+          row.innerHTML = `<span class="key">${k}</span><span class="val ${cls}">${JSON.stringify(v)}</span>`;
+          rows.appendChild(row);
+        }
+        document.getElementById('snap').textContent = JSON.stringify(snap, null, 2);
+      }
+
+      for (const id of ['tenant','env','uid']) document.getElementById(id).addEventListener('change', build);
+      build();
+    </script>
+  </body>
+</html>

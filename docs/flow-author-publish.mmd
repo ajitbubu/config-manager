@@ -1,0 +1,44 @@
+sequenceDiagram
+  autonumber
+  actor Dev as Developer<br/>(Marco · u_2)
+  actor App as Approver<br/>(Søren · u_4)
+  participant UI as FCC UI<br/>:5173
+  participant API as Express API<br/>:8787
+  participant DB as SQLite
+  participant CDN as /cdn/cfg/*
+  participant SDK as Tenant App<br/>(@fcc/sdk)
+
+  Dev->>UI: Toggle pricing.discountPercentage stage=42
+  UI->>API: PATCH /api/flags/pricing.discountPercentage<br/>{overrides:{env:{stage:42}}, __env, __tenant}
+  API->>DB: UPDATE flags SET overrides=...
+  API->>DB: INSERT audit_log (action=update, before=15, after=42)
+  API-->>UI: 200 + updated flag
+  UI-->>Dev: toast "→ 42 in stage"
+
+  Dev->>UI: Submit for review (stage → prod)
+  UI->>API: POST /api/approvals<br/>{flag, tenant, from:stage, to:prod}
+  API->>DB: INSERT approvals (status=pending)
+  API->>DB: INSERT audit_log (action=submit)
+  API-->>UI: 201 + approval row
+
+  App->>UI: Click Approve on Dashboard tile
+  UI->>API: POST /api/approvals/:id/approve
+  API->>DB: UPDATE approvals SET status=approved
+  API->>DB: INSERT audit_log (action=approve)
+  Note over API,DB: Auto-publish step
+  API->>DB: SELECT * FROM flags
+  API->>API: resolveAll(flags, ctx)
+  API->>DB: INSERT deployments<br/>(status=succeeded, version=v++,<br/>snapshot={features, source})
+  API->>DB: INSERT audit_log (action=publish)
+  API-->>UI: 200 {deployment, version}
+
+  SDK->>CDN: GET /cdn/cfg/prod/acme.json<br/>If-None-Match: W/"abc..."
+  CDN->>DB: SELECT * FROM flags
+  CDN->>CDN: resolveAll(ctx) → etag
+  alt etag changed
+    CDN-->>SDK: 200 + features + ETag
+    SDK->>SDK: snapshot updated → fire onChange()
+  else etag same
+    CDN-->>SDK: 304 Not Modified
+  end
+  SDK-->>SDK: fcc.isOn() / fcc.get() reflects new value

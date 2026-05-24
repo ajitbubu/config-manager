@@ -1,0 +1,22 @@
+flowchart TD
+  start([GET /cdn/cfg/prod/acme.json<br/>?platform=web&browser=chrome&userId=u42]) --> defaultLayer
+  defaultLayer[1 default value<br/>e.g. false] --> envLayer
+  envLayer{2 overrides.env.prod<br/>defined?} -->|yes| envApply[value := overrides.env.prod]
+  envLayer -->|no| tenantLayer
+  envApply --> tenantLayer
+  tenantLayer{3 overrides.tenant.acme.prod<br/>defined?} -->|yes| tenantApply[value := overrides.tenant.acme.prod]
+  tenantLayer -->|no| platformLayer
+  tenantApply --> platformLayer
+  platformLayer{4 overrides.platform.web<br/>defined?} -->|yes| platformApply[value := overrides.platform.web]
+  platformLayer -->|no| browserLayer
+  platformApply --> browserLayer
+  browserLayer{5 overrides.browser.chrome<br/>defined?} -->|yes| browserApply[value := overrides.browser.chrome]
+  browserLayer -->|no| rolloutLayer
+  browserApply --> rolloutLayer
+  rolloutLayer{6 rollout.enabled<br/>and type=boolean?} -->|yes| bucket
+  rolloutLayer -->|no| done
+  bucket["hash(userId : seed) → bucket<br/>bucket < percentage → keep<br/>else value := false"] --> done
+  done([final value + trace])
+
+  classDef apply fill:#ECFDF5,stroke:#059669;
+  class envApply,tenantApply,platformApply,browserApply,bucket apply;

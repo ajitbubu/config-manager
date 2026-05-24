@@ -1,0 +1,52 @@
+flowchart LR
+  classDef store fill:#FFF7E6,stroke:#D97706,color:#111;
+  classDef ui fill:#EEF2FF,stroke:#4338CA,color:#111;
+  classDef api fill:#ECFEFF,stroke:#0E7490,color:#111;
+  classDef client fill:#F0FDF4,stroke:#15803D,color:#111;
+
+  subgraph Browser["Author UI · Vite :5173"]
+    UI["React SPA<br/>App.jsx + StoreProvider"]:::ui
+    Pages["Pages<br/>Flags · Dashboard · Diff<br/>Deployments · Audit · Settings"]:::ui
+    Store["src/store.jsx<br/>(in-memory cache)"]:::ui
+  end
+
+  subgraph Server["Express API · :8787"]
+    direction TB
+    API["/api/* routes<br/>(author plane)"]:::api
+    CDN["/cdn/cfg/:env/:tenant.json<br/>(runtime plane · ETag + 304)"]:::api
+    ENG["engine.js<br/>resolveFlag · resolveAll · hash"]:::api
+    METRICS["metrics ring<br/>last-48h fetch counts"]:::api
+  end
+
+  subgraph DB["SQLite · server/fcc.db"]
+    direction TB
+    FLAGS[("flags<br/>key · type · overrides · rollout")]:::store
+    DEPLOYS[("deployments<br/>+ source snapshot JSON")]:::store
+    AUDIT[("audit_log<br/>before/after · who · when")]:::store
+    APPROVE[("approvals<br/>flag · from · to · status")]:::store
+    TENANTS_T[("tenants · users · envs")]:::store
+  end
+
+  subgraph ClientApp["Tenant App Runtime"]
+    SDK["@fcc/sdk<br/>poll + ETag + onChange"]:::client
+    APP["fcc.isOn() · fcc.get()"]:::client
+    DEMO["sdk/example/demo.html<br/>(live consumer demo)"]:::client
+  end
+
+  Pages -->|"read"| Store
+  Store -->|"REST GET/PATCH/POST"| API
+  Pages -->|"resolved preview"| CDN
+
+  API -->|"INSERT / UPDATE"| FLAGS
+  API -->|"INSERT publish/rollback"| DEPLOYS
+  API -->|"INSERT every write"| AUDIT
+  API -->|"INSERT submit/approve/reject"| APPROVE
+  API -->|"read static"| TENANTS_T
+
+  CDN --> ENG
+  ENG -->|"SELECT *"| FLAGS
+  CDN --> METRICS
+
+  SDK -->|"GET cfg.json<br/>If-None-Match"| CDN
+  APP --> SDK
+  DEMO --> SDK
