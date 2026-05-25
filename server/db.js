@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const dbPath = join(__dirname, 'fcc.db');
+const dbPath = process.env.FCC_DB_PATH || join(__dirname, 'fcc.db');
 
 export const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');
