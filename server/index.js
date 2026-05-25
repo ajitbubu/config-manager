@@ -15,7 +15,14 @@ const seedResult = seedIfEmpty();
 console.log('[fcc] db ready · seed:', seedResult);
 
 const app = express();
-app.use(cors({ origin: true, exposedHeaders: ['ETag'] }));
+const allowedOrigins = (process.env.FCC_CORS_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173').split(',');
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true);
+    cb(null, allowedOrigins.includes(origin));
+  },
+  exposedHeaders: ['ETag'],
+}));
 app.use(express.json({ limit: '1mb' }));
 
 app.get('/health', (_, res) => res.json({ ok: true, t: Date.now() }));

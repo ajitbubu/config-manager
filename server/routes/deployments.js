@@ -3,6 +3,7 @@ import { nanoid } from 'nanoid';
 import { db } from '../db.js';
 import { flagFromRow } from '../seed.js';
 import { resolveAll } from '../engine.js';
+import { PublishBody, RollbackBody, validate } from '../schemas.js';
 
 export const deploymentsRouter = Router();
 
@@ -11,9 +12,8 @@ deploymentsRouter.get('/', (req, res) => {
   res.json(rows.map(r => ({ ...r, snapshot: r.snapshot ? JSON.parse(r.snapshot) : null })));
 });
 
-deploymentsRouter.post('/', (req, res) => {
-  const { tenant, env, note = '', by = 'u_3' } = req.body || {};
-  if (!tenant || !env) return res.status(400).json({ error: 'tenant and env required' });
+deploymentsRouter.post('/', validate(PublishBody), (req, res) => {
+  const { tenant, env, note = '', by = 'u_3' } = req.body;
 
   const flagRows = db.prepare('SELECT * FROM flags').all();
   const flags = flagRows.map(flagFromRow);
@@ -49,7 +49,7 @@ deploymentsRouter.post('/', (req, res) => {
   res.status(201).json({ id, tenant, env, version, status: 'succeeded', at, by, items, cdn, duration, note });
 });
 
-deploymentsRouter.post('/:id/rollback', (req, res) => {
+deploymentsRouter.post('/:id/rollback', validate(RollbackBody), (req, res) => {
   const id = req.params.id;
   const by = req.body?.by || 'u_3';
   const target = db.prepare('SELECT * FROM deployments WHERE id = ?').get(id);

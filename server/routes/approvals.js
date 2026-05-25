@@ -3,6 +3,7 @@ import { nanoid } from 'nanoid';
 import { db } from '../db.js';
 import { flagFromRow } from '../seed.js';
 import { resolveAll } from '../engine.js';
+import { ApprovalBody, ApprovalDecisionBody, validate } from '../schemas.js';
 
 export const approvalsRouter = Router();
 
@@ -19,9 +20,8 @@ approvalsRouter.get('/', (req, res) => {
   res.json(rows.map(rowToApproval));
 });
 
-approvalsRouter.post('/', (req, res) => {
-  const { flag, tenant, from, to, requestedBy = 'u_2', reviewers = ['u_4'] } = req.body || {};
-  if (!flag || !tenant || !from || !to) return res.status(400).json({ error: 'flag, tenant, from, to required' });
+approvalsRouter.post('/', validate(ApprovalBody), (req, res) => {
+  const { flag, tenant, from, to, requestedBy = 'u_2', reviewers = ['u_4'] } = req.body;
 
   const id = 'apr_' + nanoid(6);
   const at = new Date().toISOString();
@@ -38,7 +38,7 @@ approvalsRouter.post('/', (req, res) => {
   res.status(201).json({ id, flag, tenant, from, to, requestedBy, requestedAt: at, reviewers, status: 'pending', diff: 1 });
 });
 
-approvalsRouter.post('/:id/approve', (req, res) => {
+approvalsRouter.post('/:id/approve', validate(ApprovalDecisionBody), (req, res) => {
   const by = req.body?.by || 'u_4';
   const r = db.prepare('SELECT * FROM approvals WHERE id = ?').get(req.params.id);
   if (!r) return res.status(404).json({ error: 'not_found' });
@@ -75,7 +75,7 @@ approvalsRouter.post('/:id/approve', (req, res) => {
   res.json({ ok: true, deployment: depId, version });
 });
 
-approvalsRouter.post('/:id/reject', (req, res) => {
+approvalsRouter.post('/:id/reject', validate(ApprovalDecisionBody), (req, res) => {
   const by = req.body?.by || 'u_4';
   const r = db.prepare('SELECT * FROM approvals WHERE id = ?').get(req.params.id);
   if (!r) return res.status(404).json({ error: 'not_found' });

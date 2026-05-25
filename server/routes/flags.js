@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db.js';
 import { flagFromRow } from '../seed.js';
+import { FlagPatch, validate } from '../schemas.js';
 
 export const flagsRouter = Router();
 
@@ -15,7 +16,7 @@ flagsRouter.get('/:key', (req, res) => {
   res.json(flagFromRow(row));
 });
 
-flagsRouter.patch('/:key', (req, res) => {
+flagsRouter.patch('/:key', validate(FlagPatch), (req, res) => {
   const key = req.params.key;
   const row = db.prepare('SELECT * FROM flags WHERE key = ?').get(key);
   if (!row) return res.status(404).json({ error: 'not_found' });
