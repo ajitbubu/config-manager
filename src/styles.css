@@ -425,8 +425,7 @@ label.field .label { display: block; font-size: 11px; color: var(--muted); margi
 .drawer[data-open="true"] { transform: translateX(0); }
 .drawer-head {
   display: flex; align-items: center; gap: 10px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
+  padding: 14px 16px 10px;
 }
 .drawer-head h3 { margin: 0; font-size: 14px; font-weight: 600; }
 .drawer-head .mono { font-family: var(--mono); font-size: 12px; color: var(--muted); }
@@ -441,12 +440,13 @@ label.field .label { display: block; font-size: 11px; color: var(--muted); margi
 .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); }
 .tabs button {
   all: unset; cursor: pointer;
-  padding: 7px 10px; font-size: 12px; font-weight: 500; color: var(--muted);
+  padding: 8px 12px; font-size: 12px; font-weight: 500; color: var(--muted);
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
+  transition: color 100ms ease-out, border-color 100ms ease-out;
 }
 .tabs button:hover { color: var(--ink); }
-.tabs button[data-active="true"] { color: var(--ink); border-bottom-color: var(--ink); }
+.tabs button[data-active="true"] { color: var(--accent-ink); border-bottom-color: var(--accent); }
 
 /* JSON preview */
 .json {
