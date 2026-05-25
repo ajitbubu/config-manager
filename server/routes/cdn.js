@@ -4,6 +4,17 @@ import { flagFromRow } from '../seed.js';
 import { resolveAll } from '../engine.js';
 import { metricsRecord } from './metrics.js';
 
+// CDN model: LIVE (not snapshot).
+// This endpoint reads the current flags table, not the latest deployment snapshot.
+// A flag edit takes effect on the next CDN read, before any explicit publish.
+// Publish/Rollback exist to (a) write an audit trail + version stamp and (b) capture
+// a source snapshot that rollback can restore from. They are not gates between
+// "draft" and "live" state — there is no draft state in this design.
+//
+// To migrate to a published-snapshot model later: pick the latest deployments row
+// for (tenant, env) with status='succeeded' or 'rolled_back' and serve its
+// snapshot.features instead of calling resolveAll() here.
+
 export const cdnRouter = Router();
 
 cdnRouter.get('/cfg/:env/:tenantFile', (req, res) => {
