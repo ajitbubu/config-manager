@@ -402,7 +402,7 @@ label.field .label { display: block; font-size: 11px; color: var(--muted); margi
   padding: 12px 14px;
 }
 .metric .label { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
-.metric .value { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.metric .value { font-size: 28px; font-weight: 600; letter-spacing: -0.025em; margin-top: 6px; font-variant-numeric: tabular-nums; line-height: 1.1; }
 .metric .trend { font-family: var(--mono); font-size: 10.5px; margin-top: 4px; color: var(--muted); }
 .metric .trend.up { color: var(--success); }
 .metric .trend.down { color: var(--danger); }
@@ -590,7 +590,14 @@ kbd {
 }
 
 /* Marquee row used in dashboard */
-.activity-row { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+.activity-row {
+  display: grid; grid-template-columns: auto 1fr auto; gap: 10px;
+  align-items: center; padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 100ms ease-out;
+}
+.activity-row:hover { background: var(--surface-2); }
 .activity-row:last-child { border-bottom: none; }
 
 /* Small helpers */
