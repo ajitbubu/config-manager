@@ -132,11 +132,18 @@
 
 These are deliberately separate from DESIGN.md decisions — they're the gap between the doc and today's [src/styles.css](src/styles.css):
 
-1. Bump `--accent` from `#2E5BFF` to `#635BFF` (Stripe purple)
-2. Convert env switcher in [src/ui.jsx](src/ui.jsx) from colored ghost buttons to a Stripe-style segmented control
-3. Add `font-variant-numeric: tabular-nums` to `.num` and `.mono` classes globally
-4. Soften status chips (`.chip.success`, `.chip.warning`, `.chip.danger`) to pastel-bg + dark-ink combinations
-5. Add ⌘K kbd hint to the top-bar search field
-6. Add `@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }` to styles.css
-7. Replace the Inter system fallback ("system-ui, -apple-system, ...") — keep these as fallback chain but ensure Inter Tight actually loads from Google Fonts (it already does)
-8. Mobile responsive: sidebar collapse to icon-only at <1024px, top-bar tenant+env switcher wrap or collapse, table → card view at <768px (deferred — half-day refactor noted in design audit)
+1. ✅ ~~Bump `--accent` to `#635BFF` (Stripe purple)~~ — shipped commit `ce4e901`. **Superseded** by the Data Safeguard rebrand to `#1A77F2` (commit `96df8e1`).
+2. ✅ Convert env switcher to a Stripe-style segmented control — shipped commit `9d51f46`.
+3. ✅ `font-variant-numeric: tabular-nums` on `.mono` and `.tbl td` — shipped commit `1b8f7d5`.
+4. ✅ Pastel status chips (soft bg + dark ink) — shipped commit `6af3d62`. Token values: success `#047857`/`#F0F9F4`, warning `#B45309`/`#FFF7ED`, danger `#B91C1C`/`#FEF2F2`.
+5. ✅ ⌘K kbd hint in topbar search — verified already wired in [ui.jsx:230](src/ui.jsx#L230) + styled in [styles.css:142](src/styles.css#L142). No code change needed.
+6. ✅ `prefers-reduced-motion` media query — shipped commit `aaaff71`.
+7. ✅ Preload Google Fonts stylesheet, `font-display: swap` already in URL — shipped commit `a52cd75`.
+8. ⏳ **Mobile responsive** — sidebar collapse to icon-only at <1024px, top-bar tenant+env switcher wrap, table → card view at <768px. Half-day refactor, deferred.
+
+**Additional polish shipped alongside the backlog:**
+
+- Drawer tab indicator uses `--accent` underline instead of `--ink` (commit `bc1a0f4`).
+- Drawer head padding tightened, redundant bottom-border dropped.
+- Dashboard metric values bumped to 28px / weight 600 / tight letter-spacing (commit `2a495fa`).
+- Dashboard activity rows now have hover state + cursor (foundation for future click-through).
