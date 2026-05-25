@@ -13,12 +13,12 @@
   --accent: #1A77F2;
   --accent-weak: #E8F2FE;
   --accent-ink: #0F5BC2;
-  --success: #0E9F6E;
-  --success-weak: #E6F6EE;
-  --warning: #B4711A;
-  --warning-weak: #FCF2DE;
-  --danger:  #C0392B;
-  --danger-weak: #FBE9E6;
+  --success: #047857;
+  --success-weak: #F0F9F4;
+  --warning: #B45309;
+  --warning-weak: #FFF7ED;
+  --danger:  #B91C1C;
+  --danger-weak: #FEF2F2;
   --info: #6366F1;
   --env-dev: #6B7280;
   --env-qa:  #A855F7;
@@ -334,8 +334,8 @@ button { font-family: inherit; color: inherit; }
 .chip .dot { width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
 .chip.env-dev { color: #4B5563; background: #EEF0F2; border-color: transparent; }
 .chip.env-qa  { color: #7E22CE; background: #F3E8FF; border-color: transparent; }
-.chip.env-stage { color: #B4711A; background: var(--warning-weak); border-color: transparent; }
-.chip.env-prod { color: #047857; background: var(--success-weak); border-color: transparent; }
+.chip.env-stage { color: var(--warning); background: var(--warning-weak); border-color: transparent; }
+.chip.env-prod { color: var(--success); background: var(--success-weak); border-color: transparent; }
 
 [data-theme="dark"] .chip.env-dev { color: #B0B6C0; background: #20262E; }
 [data-theme="dark"] .chip.env-qa { color: #D4B8FF; background: #2A1A40; }
