@@ -601,9 +601,9 @@ export function Login({ onEnter }) {
   return (
     <div className="login-wrap">
       <div className="card" style={{width: 400, padding: 28, boxShadow:'var(--shadow-pop)'}}>
-        <div className="brand" style={{width:'auto', paddingRight:0}}>
-          <div className="mark">F</div>
-          <div><div>Feature Control Center</div><div className="sub">enterprise · multi-tenant</div></div>
+        <div className="brand" style={{width:'auto', paddingRight:0, flexDirection:'column', alignItems:'flex-start', gap: 6}}>
+          <img src="/logo.svg" alt="Data Safeguard" className="brand-logo" style={{height: 28}}/>
+          <div className="sub">Feature Control Center · enterprise · multi-tenant</div>
         </div>
         <h2 style={{margin:'20px 0 4px', fontSize:20, letterSpacing:'-0.02em'}}>Sign in</h2>
         <div className="text-xs muted mb-8">Pick an identity to author as. Audit entries are attributed to your selection.</div>

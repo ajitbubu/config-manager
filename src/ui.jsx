@@ -201,10 +201,9 @@ export function TopBar({ env, onEnv, tenant, onTenant, onOpenSearch }) {
   return (
     <div className="topbar">
       <div className="brand">
-        <div className="mark">F</div>
-        <div>
-          <div>Feature Control Center</div>
-        </div>
+        <img src="/logo.svg" alt="Data Safeguard" className="brand-logo"/>
+        <div className="vsep" style={{ height: 22, margin: '0 4px' }} />
+        <div className="brand-sub">Feature Control</div>
       </div>
       <div className="topbar-center">
         <button className="tenant-pill" onClick={() => {

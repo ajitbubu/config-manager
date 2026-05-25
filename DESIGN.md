@@ -1,11 +1,12 @@
-# Design System — Feature Control Center (FCC)
+# Design System — Feature Control · Data Safeguard
 
 ## Product Context
 
-- **What this is:** Multi-tenant feature flag and runtime config management platform. Author flags in a UI, evaluate them via a CDN endpoint, ship updates safely across environments.
+- **What this is:** Multi-tenant feature flag and runtime config management platform under the Data Safeguard product family. Author flags in a UI, evaluate them via a CDN endpoint, ship updates safely across environments.
 - **Who it's for:** Platform engineers, DevOps, release managers, and approvers at SaaS companies that ship to many customer organizations.
 - **Space:** Developer infrastructure / internal tooling. Peers: LaunchDarkly, Statsig, Flagsmith, Stripe's internal config tooling.
 - **Project type:** Data-dense web app with both author plane (editing) and runtime plane (CDN serving SDKs).
+- **Parent brand:** Data Safeguard (enterprise data-privacy / compliance / fraud-prevention product family). Feature Control is one product surface within that family.
 - **Memorable thing:** "Bloomberg Terminal for feature flags — serious software where every pixel earns its place." Users live in this tool 8 hours a day. Every visual decision serves that working session, not a marketing flyby.
 
 ## Aesthetic Direction
@@ -48,10 +49,10 @@
   - `--muted: #687385` — labels, captions
   - `--muted-2: #8792A2` — disabled, "—" placeholders
 - **Accent (single):**
-  - `--accent: #635BFF` — Stripe purple. Used for primary CTAs, active filter state, focused row left-border (2px), focus-visible rings.
-  - `--accent-hover: #5046E5` — hover state for primary buttons
-  - `--accent-soft: #EFEFFE` — accent-tinted backgrounds (active chip, selected row hover)
-  - `--accent-ink: #4B40DE` — text-on-light-accent contrast (chip labels)
+  - `--accent: #1A77F2` — Data Safeguard brand blue (sampled from the parent-brand logo). Used for primary CTAs, active filter state, focused row left-border (2px), focus-visible rings.
+  - `--accent-ink: #0F5BC2` — darker accent for hover, pressed states, and text-on-light-accent contrast (chip labels).
+  - `--accent-weak: #E8F2FE` — accent-tinted backgrounds (active chip, selected row hover).
+  - Dark-mode pair: `--accent: #4D95F5`, `--accent-weak: #0E2541`, `--accent-ink: #8FB8F8`.
 - **Semantic (soft pastel — never shouty):**
   - Success: bg `#F0F9F4`, ink `#047857`. Used for env=prod chips, "succeeded" deployments, true booleans in tables.
   - Warning: bg `#FFF7ED`, ink `#B45309`. Used for env=stage, "stale" flags, "draft" version chips, "unsaved" indicator.
@@ -121,6 +122,7 @@
 | 2026-05-24 | Initial DESIGN.md created | Locked in via /design-shotgun (user picked Variant B "Stripe-dense" over Linear editorial / Terminal pro) + /design-review baseline |
 | 2026-05-24 | Two-font system: Inter Tight + JetBrains Mono | Preserved from initial scaffold; both fonts already loaded; pairing tested and works |
 | 2026-05-24 | Stripe purple #635BFF as single accent | User chose Variant B which used this. Replaces previous #2E5BFF blue. |
+| 2026-05-25 | Rebrand to Data Safeguard parent brand | User-directed. Accent moves from `#635BFF` to `#1A77F2` (color sampled directly from the user-provided logo SVG `fill` attribute). Logo wordmark replaces the placeholder "F" mark in top bar + login. Page title becomes "Feature Control · Data Safeguard". Favicon points at `/logo.svg`. The Stripe-dense layout language (data density, segmented controls, soft pastel chips, tabular nums) survives unchanged — only the brand color and mark identity move. |
 | 2026-05-24 | Tenant brand colors preserved | They're product identity, not design system. Acme orange / Helios yellow etc. stay |
 | 2026-05-24 | Env semantic colors preserved | dev gray, qa purple, stage amber, prod green — these are wired into too much UI to change |
 | 2026-05-24 | Compact spacing (4px base) | Power-user tool. Density > comfort. /design-shotgun's "Linear editorial" with more whitespace was rejected |

@@ -10,9 +10,9 @@
   --ink-2: #353841;
   --muted: #6B7380;
   --muted-2: #9AA0AA;
-  --accent: #635BFF;
-  --accent-weak: #EFEFFE;
-  --accent-ink: #4B40DE;
+  --accent: #1A77F2;
+  --accent-weak: #E8F2FE;
+  --accent-ink: #0F5BC2;
   --success: #0E9F6E;
   --success-weak: #E6F6EE;
   --warning: #B4711A;
@@ -41,9 +41,9 @@
   --ink-2: #C6CBD3;
   --muted: #8A93A2;
   --muted-2: #5A616D;
-  --accent: #7B73FF;
-  --accent-weak: #1E1A3D;
-  --accent-ink: #B5AFFF;
+  --accent: #4D95F5;
+  --accent-weak: #0E2541;
+  --accent-ink: #8FB8F8;
   --success: #22C58D;
   --success-weak: #0E2B22;
   --warning: #E8B55C;
@@ -97,7 +97,12 @@ button { font-family: inherit; color: inherit; }
 .brand {
   display: flex; align-items: center; gap: 8px;
   font-weight: 600; font-size: 13px; letter-spacing: -0.01em;
-  width: 218px; padding-right: 12px;
+  width: auto; padding-right: 12px;
+}
+.brand-logo {
+  height: 22px;
+  width: auto;
+  display: block;
 }
 .brand .mark {
   width: 22px; height: 22px; border-radius: 6px;
@@ -110,6 +115,10 @@ button { font-family: inherit; color: inherit; }
   content: ""; position: absolute; right: -2px; bottom: -2px;
   width: 8px; height: 8px; border-radius: 2px; background: var(--accent);
   border: 2px solid var(--surface);
+}
+.brand-sub {
+  font-family: var(--sans); font-size: 12px; color: var(--muted); font-weight: 500;
+  letter-spacing: 0;
 }
 .brand .sub {
   font-family: var(--mono); font-size: 10px; color: var(--muted); font-weight: 500; letter-spacing: 0;
