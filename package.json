@@ -1,5 +1,5 @@
 {
-  "name": "feature-control-center",
+  "name": "config-manager",
   "private": true,
   "version": "0.1.0",
   "type": "module",
